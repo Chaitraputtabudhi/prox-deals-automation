@@ -1,0 +1,101 @@
+# .github/workflows/weekly-deals.yml
+# Automated weekly deals email workflow
+
+name: Send Weekly Deals
+
+on:
+  # Run every Sunday at 6am UTC
+  schedule:
+    - cron: '0 6 * * 0'
+  
+  # Allow manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (preview only, no emails)'
+        required: false
+        default: 'false'
+
+jobs:
+  send-deals:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run weekly automation
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          NODE_ENV: production
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
+            echo "Running in preview mode..."
+            npm run preview
+          else
+            echo "Sending weekly deals..."
+            npm run send:weekly
+          fi
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-deals-logs
+          path: |
+            *.log
+            deals-preview.html
+          retention-days: 30
+
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '⚠️ Weekly deals automation failed',
+              body: `The weekly deals automation failed on ${new Date().toISOString()}\n\nCheck the [workflow run](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) for details.`,
+              labels: ['automation', 'bug']
+            })
+
+---
+
+# Setup Instructions:
+
+# 1. Create the workflow directory
+mkdir -p .github/workflows
+
+# 2. Create the workflow file
+# Copy the YAML above to: .github/workflows/weekly-deals.yml
+
+# 3. Add secrets to GitHub repository:
+# Go to: Settings → Secrets and variables → Actions → New repository secret
+# Add:
+#   - SUPABASE_URL
+#   - SUPABASE_ANON_KEY
+#   - RESEND_API_KEY
+
+# 4. Test the workflow:
+# - Go to Actions tab in GitHub
+# - Click "Send Weekly Deals"
+# - Click "Run workflow"
+# - Check "Dry run" for testing
+# - Click "Run workflow"
+
+# 5. Monitor runs:
+# - Check Actions tab for status
+# - Download logs from artifacts
+# - View issues for failures
