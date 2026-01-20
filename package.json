@@ -6,7 +6,7 @@
   "scripts": {
     "send:weekly": "tsx src/index.ts --action=send-weekly",
     "ingest": "tsx src/index.ts --action=ingest",
-    "preview": "tsx src/index.ts --action=preview"
+    "preview": "tsx src/preview-standalone.ts"
   },
   "keywords": [],
   "author": "Chaitra Puttabudhi",
