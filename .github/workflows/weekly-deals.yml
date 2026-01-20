@@ -1,5 +1,5 @@
 # .github/workflows/weekly-deals.yml
-# Automated weekly deals email workflow
+# Fixed version - resolves permission and cache issues
 
 name: Send Weekly Deals
 
@@ -15,6 +15,12 @@ on:
         description: 'Dry run (preview only, no emails)'
         required: false
         default: 'false'
+        type: boolean
+
+# Add permissions for creating issues
+permissions:
+  contents: read
+  issues: write
 
 jobs:
   send-deals:
@@ -28,7 +34,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          # Remove cache since we don't have a lock file
+          # cache: 'npm'
+
+      - name: Generate package-lock.json
+        run: npm install --package-lock-only
 
       - name: Install dependencies
         run: npm ci
@@ -40,62 +50,71 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           NODE_ENV: production
         run: |
-          if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
-            echo "Running in preview mode..."
+          if [ "${{ inputs.dry_run }}" == "true" ]; then
+            echo "🔍 Running in preview mode..."
             npm run preview
           else
-            echo "Sending weekly deals..."
+            echo "📧 Sending weekly deals..."
             npm run send:weekly
           fi
 
-      - name: Upload logs
-        if: always()
+      - name: Upload logs on success
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: weekly-deals-logs
+          name: weekly-deals-logs-${{ github.run_number }}
           path: |
             *.log
             deals-preview.html
           retention-days: 30
+          if-no-files-found: ignore
 
-      - name: Notify on failure
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-deals-error-logs-${{ github.run_number }}
+          path: |
+            *.log
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Create issue on failure
         if: failure()
         uses: actions/github-script@v7
         with:
           script: |
-            github.rest.issues.create({
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const issueBody = `## ⚠️ Weekly Deals Automation Failed
+            
+            **Run:** [#${context.runNumber}](${runUrl})
+            **Time:** ${new Date().toISOString()}
+            **Branch:** ${context.ref}
+            
+            ### Next Steps
+            1. Check the [workflow run logs](${runUrl})
+            2. Review error artifacts
+            3. Verify secrets are configured correctly
+            
+            ### Quick Checks
+            - [ ] SUPABASE_URL is set
+            - [ ] SUPABASE_ANON_KEY is set
+            - [ ] RESEND_API_KEY is set
+            - [ ] Database is accessible
+            - [ ] Email service is working
+            
+            cc: @${context.actor}`;
+            
+            await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: '⚠️ Weekly deals automation failed',
-              body: `The weekly deals automation failed on ${new Date().toISOString()}\n\nCheck the [workflow run](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) for details.`,
-              labels: ['automation', 'bug']
-            })
+              title: `⚠️ Weekly deals failed - ${new Date().toLocaleDateString()}`,
+              body: issueBody,
+              labels: ['automation', 'bug', 'needs-investigation']
+            });
 
----
-
-# Setup Instructions:
-
-# 1. Create the workflow directory
-mkdir -p .github/workflows
-
-# 2. Create the workflow file
-# Copy the YAML above to: .github/workflows/weekly-deals.yml
-
-# 3. Add secrets to GitHub repository:
-# Go to: Settings → Secrets and variables → Actions → New repository secret
-# Add:
-#   - SUPABASE_URL
-#   - SUPABASE_ANON_KEY
-#   - RESEND_API_KEY
-
-# 4. Test the workflow:
-# - Go to Actions tab in GitHub
-# - Click "Send Weekly Deals"
-# - Click "Run workflow"
-# - Check "Dry run" for testing
-# - Click "Run workflow"
-
-# 5. Monitor runs:
-# - Check Actions tab for status
-# - Download logs from artifacts
-# - View issues for failures
+      - name: Comment on success
+        if: success() && github.event_name == 'workflow_dispatch'
+        run: |
+          echo "✅ Weekly deals workflow completed successfully!"
+          echo "📊 Check artifacts for preview HTML and logs"
