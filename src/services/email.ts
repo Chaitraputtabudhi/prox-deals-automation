@@ -3,7 +3,7 @@ import { Resend } from 'resend';
 import { supabase } from '../config/database.js';
 import { generateEmailHTML } from '../templates/weeklyDeals.js';
 import { DealForEmail } from '../types/index.js';
-
+import { trackEmailError } from '../config/sentry.js';
 // Initialize Resend client
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -100,14 +100,23 @@ export async function sendWeeklyDeals(): Promise<void> {
 
       // Small delay to avoid rate limiting
       await new Promise(resolve => setTimeout(resolve, 100));
+      // After successful send
+      await supabase.from('email_analytics').insert({
+      user_id: user.id,
+      sent_at: new Date().toISOString(),
+      deals_included: userDeals.length
+});
 
     } catch (error: any) {
       failCount++;
+      trackEmailError(user.email, error);
+      console.error(`Failed:`, error);
       console.error(`  ✗ ${user.email} - Error: ${error.message}`);
     }
   }
 
   console.log(`\n✅ Sent ${successCount} emails successfully`);
+  
   if (failCount > 0) {
     console.log(`⚠️  ${failCount} emails failed\n`);
   } else {

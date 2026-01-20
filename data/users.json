@@ -6,12 +6,12 @@
   },
   {
     "name": "Test User 2",
-    "email": "YOUR-EMAIL+test2@gmail.com",
-    "preferred_retailers": ["Walmart", "Aldi"]
+    "email": "chaitraputtabudhi+test2@gmail.com",
+    "preferred_retailers": ["Walmart", "Aldi", "Smart & Final"]
   },
   {
     "name": "Test User 3",
-    "email": "YOUR-EMAIL+test3@gmail.com",
-    "preferred_retailers": ["Ralphs", "Vons"]
+    "email": "chaitraputtabudhi+test3@gmail.com",
+    "preferred_retailers": ["Ralphs", "Vons", "CVS"]
   }
 ]

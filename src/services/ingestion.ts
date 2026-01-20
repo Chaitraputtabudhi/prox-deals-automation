@@ -1,7 +1,7 @@
 // Ingestion service - Loads deals and users into Supabase
 import { supabase } from '../config/database.js';
 import { Deal, User } from '../types/index.js';
-
+import { trackIngestionError } from '../config/sentry.js';
 /**
  * Ingest deals into database with deduplication
  * Deduplication is based on: retailer + product + start_date (unique constraint)
@@ -79,6 +79,8 @@ export async function ingestDeals(deals: Deal[]): Promise<void> {
         console.log(`  ✓ Created deal: ${deal.retailer} - ${deal.product} ($${deal.price})`);
       }
     } catch (error: any) {
+      trackIngestionError(deal, error);
+      console.error(`Failed:`, error);
       console.error(`  ✗ Failed to process deal:`, error.message);
     }
   }

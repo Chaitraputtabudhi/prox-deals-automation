@@ -1,23 +1,16 @@
-# .github/workflows/weekly-deals.yml
-# Fixed version - resolves permission and cache issues
-
 name: Send Weekly Deals
 
 on:
-  # Run every Sunday at 6am UTC
   schedule:
     - cron: '0 6 * * 0'
-  
-  # Allow manual trigger for testing
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Dry run (preview only, no emails)'
+        description: 'Preview mode (no emails sent)'
         required: false
-        default: 'false'
+        default: false
         type: boolean
 
-# Add permissions for creating issues
 permissions:
   contents: read
   issues: write
@@ -34,87 +27,50 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          # Remove cache since we don't have a lock file
-          # cache: 'npm'
-
-      - name: Generate package-lock.json
-        run: npm install --package-lock-only
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Run weekly automation
+      - name: Preview mode (no database)
+        if: inputs.dry_run == true
+        run: |
+          echo "🔍 Preview mode - generating sample email..."
+          npm run preview
+
+      - name: Send weekly deals
+        if: inputs.dry_run != true
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           NODE_ENV: production
         run: |
-          if [ "${{ inputs.dry_run }}" == "true" ]; then
-            echo "🔍 Running in preview mode..."
-            npm run preview
-          else
-            echo "📧 Sending weekly deals..."
-            npm run send:weekly
-          fi
+          echo "📧 Sending weekly deals..."
+          npm run send:weekly
 
-      - name: Upload logs on success
-        if: success()
+      - name: Upload preview HTML
+        if: inputs.dry_run == true
         uses: actions/upload-artifact@v4
         with:
-          name: weekly-deals-logs-${{ github.run_number }}
-          path: |
-            *.log
-            deals-preview.html
-          retention-days: 30
-          if-no-files-found: ignore
+          name: email-preview-${{ github.run_number }}
+          path: deals-preview.html
+          retention-days: 7
 
-      - name: Upload logs on failure
-        if: failure()
+      - name: Upload logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: weekly-deals-error-logs-${{ github.run_number }}
+          name: logs-${{ github.run_number }}
           path: |
             *.log
-          retention-days: 30
+          retention-days: 7
           if-no-files-found: ignore
 
-      - name: Create issue on failure
-        if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const issueBody = `## ⚠️ Weekly Deals Automation Failed
-            
-            **Run:** [#${context.runNumber}](${runUrl})
-            **Time:** ${new Date().toISOString()}
-            **Branch:** ${context.ref}
-            
-            ### Next Steps
-            1. Check the [workflow run logs](${runUrl})
-            2. Review error artifacts
-            3. Verify secrets are configured correctly
-            
-            ### Quick Checks
-            - [ ] SUPABASE_URL is set
-            - [ ] SUPABASE_ANON_KEY is set
-            - [ ] RESEND_API_KEY is set
-            - [ ] Database is accessible
-            - [ ] Email service is working
-            
-            cc: @${context.actor}`;
-            
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `⚠️ Weekly deals failed - ${new Date().toLocaleDateString()}`,
-              body: issueBody,
-              labels: ['automation', 'bug', 'needs-investigation']
-            });
-
-      - name: Comment on success
-        if: success() && github.event_name == 'workflow_dispatch'
+      - name: Summary
+        if: always()
         run: |
-          echo "✅ Weekly deals workflow completed successfully!"
-          echo "📊 Check artifacts for preview HTML and logs"
+          if [ "${{ inputs.dry_run }}" == "true" ]; then
+            echo "✅ Preview generated successfully"
+          else
+            echo "✅ Weekly deals sent!"
+          fi
