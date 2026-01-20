@@ -1,0 +1,26 @@
+{
+  "name": "prox-deals-automation",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "send:weekly": "tsx src/index.ts --action=send-weekly",
+    "ingest": "tsx src/index.ts --action=ingest",
+    "preview": "tsx src/index.ts --action=preview"
+  },
+  "keywords": [],
+  "author": "Chaitra Puttabudhi",
+  "license": "ISC",
+  "description": "Automated weekly deals system",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.90.1",
+    "date-fns": "^4.1.0",
+    "dotenv": "^17.2.3",
+    "resend": "^6.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.9",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
